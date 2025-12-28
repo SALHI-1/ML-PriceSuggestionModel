@@ -16,7 +16,7 @@ model_daily = joblib.load('daily/model_daily.joblib')
 prep_daily = joblib.load('daily/preprocessor_daily.joblib')
 
 # 2. Schémas de données (Pydantic)
-class MonthlyInput(BaseModel):
+class Input(BaseModel):
     city: str
     country: str
     longitude: float
@@ -25,24 +25,12 @@ class MonthlyInput(BaseModel):
     total_rooms: int
     nombre_etoiles: int
 
-class DailyInput(BaseModel):
-    city: str
-    country: str
-    longitude: float
-    latitude: float
-    sqm: int
-    total_rooms: int
-    max_guests: int
-    has_wifi: int # 0 ou 1
-    has_pool: int # 0 ou 1
-    distance_to_center: float
-    distance_to_sea: float
-    nombre_etoiles: int
+
 
 # --- ROUTES ---
 
 @app.post("/predict/monthly")
-def predict_monthly(data: MonthlyInput):
+def predict_monthly(data: Input):
     df = pd.DataFrame([data.dict()])
     processed = prep_monthly.transform(df)
     price_wei = model_monthly.predict(processed)[0]
@@ -53,7 +41,7 @@ def predict_monthly(data: MonthlyInput):
     }
 
 @app.post("/predict/daily")
-def predict_daily(data: DailyInput):
+def predict_daily(data: Input):
     df = pd.DataFrame([data.dict()])
     processed = prep_daily.transform(df)
     price_wei = model_daily.predict(processed)[0]
