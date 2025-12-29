@@ -1,55 +1,31 @@
 import pandas as pd
 import numpy as np
 import random
+from pathlib import Path
 
 # Configuration
 num_rows = 3000
 eth_to_wei = 10**18
+mad_to_eth = 1 / 25000  # Conversion basée sur 1 ETH = 25.000 DH
 
-# 1. Structure de données : Pays -> Villes -> {lat, lon, price_factor}
-# Le price_factor simule le coût de la vie relatif en ETH
-world_data = {
+# 1. Structure de données : Uniquement le Maroc avec 12 villes
+# [latitude, longitude, price_factor_ville]
+# Les facteurs sont ajustés selon le coût du loyer local
+morocco_data = {
     'Morocco': {
-        'factor': 1.0,
         'cities': {
-            'Casablanca': [33.5731, -7.5898, 1.3],
-            'Marrakech': [31.6295, -7.9811, 1.2],
-            'Rabat': [34.0209, -6.8416, 1.2],
-            'Tangier': [35.7595, -5.8340, 1.1]
-        }
-    },
-    'France': {
-        'factor': 3.5,
-        'cities': {
-            'Paris': [48.8566, 2.3522, 2.5],
-            'Lyon': [45.7640, 4.8357, 1.5],
-            'Marseille': [43.2965, 5.3698, 1.3],
-            'Nice': [43.7102, 7.2620, 1.8]
-        }
-    },
-    'Spain': {
-        'factor': 2.5,
-        'cities': {
-            'Madrid': [40.4168, -3.7038, 1.8],
-            'Barcelona': [41.3851, 2.1734, 2.0],
-            'Valencia': [39.4699, -0.3763, 1.3],
-            'Sevilla': [37.3891, -5.9845, 1.1]
-        }
-    },
-    'USA': {
-        'factor': 4.5,
-        'cities': {
-            'New York': [40.7128, -74.0060, 3.0],
-            'Los Angeles': [34.0522, -118.2437, 2.5],
-            'Miami': [25.7617, -80.1918, 2.2],
-            'Chicago': [41.8781, -87.6298, 1.8]
-        }
-    },
-    'UAE': {
-        'factor': 4.0,
-        'cities': {
-            'Dubai': [25.2048, 55.2708, 2.8],
-            'Abu Dhabi': [24.4539, 54.3773, 2.2]
+            'Casablanca': [33.5731, -7.5898, 1.5],   # Économique, très cher
+            'Rabat': [34.0209, -6.8416, 1.45],      # Capitale, cher
+            'Marrakech': [31.6295, -7.9811, 1.3],   # Touristique
+            'Tangier': [35.7595, -5.8340, 1.25],    # Nord en expansion
+            'Agadir': [30.4278, -9.5981, 1.1],      # Touristique Sud
+            'Fes': [34.0331, -5.0003, 0.85],        # Historique, abordable
+            'Meknes': [33.8935, -5.5473, 0.8],      # Abordable
+            'Oujda': [34.6805, -1.9076, 0.7],       # Oriental, moins cher
+            'Kenitra': [34.2570, -6.5890, 0.95],    # Proche Rabat
+            'Tetouan': [35.5785, -5.3684, 1.0],     # Nord
+            'El Jadida': [33.2316, -8.5007, 0.9],   # Industriel/Etudiant
+            'Nador': [35.1681, -2.9335, 1.0]        # Portuaire
         }
     }
 }
@@ -57,46 +33,56 @@ world_data = {
 data = []
 
 for i in range(num_rows):
-    # Sélection aléatoire
-    country = random.choice(list(world_data.keys()))
-    city = random.choice(list(world_data[country]['cities'].keys()))
+    country = 'Morocco'
+    city = random.choice(list(morocco_data[country]['cities'].keys()))
     
-    city_info = world_data[country]['cities'][city]
-    country_factor = world_data[country]['factor']
+    city_info = morocco_data[country]['cities'][city]
     
-    # Coordonnées avec léger bruit
-    lat = city_info[0] + random.uniform(-0.08, 0.08)
-    lon = city_info[1] + random.uniform(-0.08, 0.08)
+    # Coordonnées avec léger bruit pour simuler différents quartiers
+    lat = city_info[0] + random.uniform(-0.04, 0.04)
+    lon = city_info[1] + random.uniform(-0.04, 0.04)
     city_factor = city_info[2]
     
     # Caractéristiques physiques
-    sqm = random.randint(20, 350)
-    total_rooms = max(1, int(sqm / 40) + random.randint(0, 2))
+    sqm = random.randint(40, 180) # Appartements standards marocains
+    total_rooms = max(1, int(sqm / 40) + random.randint(0, 1))
     nombre_etoiles = random.randint(1, 5)
     
-    # --- LOGIQUE DE PRIX (ETH) ---
-    # Base : 0.0005 ETH par m2
-    base_eth = sqm * 0.0005
-    # Application des multiplicateurs
-    final_eth = base_eth * country_factor * city_factor
-    # Bonus standing (étoiles)
-    final_eth += (nombre_etoiles * 0.08 * country_factor)
+    # --- LOGIQUE DE PRIX (Calibrée en MAD puis convertie en ETH) ---
+    # Base : environ 40 DH par m2
+    base_mad = sqm * 45 
     
-    # Bruit de marché (+/- 15%)
-    final_eth *= random.uniform(0.85, 1.15)
+    # Application du facteur ville (ex: Casa = 1.5 * base)
+    final_mad = base_mad * city_factor
     
-    # Conversion en Wei
+    # Bonus Standing (Étoiles) : de 500 DH à 2500 DH en plus
+    final_mad += (nombre_etoiles * 500)
+    
+    # Bruit de marché (+/- 10%)
+    final_mad *= random.uniform(0.9, 1.1)
+    
+    # --- CONVERSION ---
+    # On s'assure que le prix reste dans la fourchette 2000 - 15000 DH
+    final_mad = max(2000, min(final_mad, 16000))
+    
+    # Conversion MAD -> ETH -> Wei
+    final_eth = final_mad * mad_to_eth
     rental_rent_wei = int(final_eth * eth_to_wei)
     
     data.append([
         city, country, lon, lat, sqm, total_rooms, 
         "MONTHLY", nombre_etoiles, rental_rent_wei
     ])
-
 # 2. DataFrame et Export
 columns = ['city', 'country', 'longitude', 'latitude', 'sqm', 'total_rooms', 'typeOfRental', 'nombre_etoiles', 'rental_rent']
 df = pd.DataFrame(data, columns=columns)
-df.to_csv('property_global_data_wei.csv', index=False)
+
+
+# Sauvegarde dans le même dossier que le script
+current_dir = Path(__file__).resolve().parent
+file_path = current_dir / 'property_monthly_data_wei.csv'
+df.to_csv(file_path, index=False)
+
 
 print(f"Dataset international de {num_rows} lignes généré !")
 print(df.groupby('country')['rental_rent'].mean() / eth_to_wei) # Affiche prix moyen en ETH par pays
